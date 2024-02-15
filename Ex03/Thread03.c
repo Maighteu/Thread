@@ -6,7 +6,7 @@
 #include <string.h>
 #include <time.h>
 #include <sched.h>
-#define ThreadMax 4
+#define ThreadMax 5
 
 typedef struct 
 {
