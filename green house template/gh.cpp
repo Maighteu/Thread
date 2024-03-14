@@ -41,12 +41,13 @@ pthread_mutex_t mutexEchec;
 pthread_t ThreadHandler;
 
 struct sigaction sigAct;
+
 typedef struct
 {
     int presence;
     pthread_t tid;
 } S_PRESENCE; 
-
+struct timespec temps; 
 
 
 typedef struct
@@ -67,7 +68,7 @@ typedef struct
 } S_ETAT_JEU;
 
 S_ETAT_JEU etatJeu = 
-     { BAS, 1, NORMAL,
+     { BAS, 0, NORMAL,
        { NORMAL, NORMAL, NORMAL, NORMAL, NORMAL },
        { { AUCUN, 0 }, { AUCUN, 0 } },
        { { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 } },
@@ -85,6 +86,12 @@ int echec = AUCUN;
 int main(int argc, char* argv[])
 {
     int i;
+    pthread_mutex_init (&mutexEvenement,NULL);
+    pthread_mutex_init (&mutexEtatJeu,NULL);
+    pthread_mutex_init (&mutexEchec,NULL);
+
+    pthread_cond_init(&condEvenement,NULL);
+    pthread_cond_init (&condEchec,NULL);
 
     ouvrirFenetreGraphique();
 
@@ -99,35 +106,9 @@ int main(int argc, char* argv[])
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadFenetreGraphique, NULL);
 
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadEvenements, NULL);
-   /* while(1)
-    {
-        evenement = lireEvenement();
 
-        switch(evenement)
-        {
-            case SDL_QUIT:
-                exit(0);
+    pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadStanley, NULL);
 
-            case SDLK_UP:
-                printf("KEY_UP\n");
-                break;
-
-            case SDLK_DOWN:
-                printf("KEY_DOWN\n");
-                break;
-
-            case SDLK_LEFT:
-                printf("KEY_LEFT\n");
-                break;
-
-            case SDLK_RIGHT:
-                printf("KEY_RIGHT\n");
-                break;
-
-            case SDLK_SPACE:
-                printf("SDLK_SPACE\n");
-        }
-    }*/
     pause();
 }
 
@@ -136,7 +117,7 @@ void* fctThreadFenetreGraphique(void*)
     int i;
     pthread_cleanup_push(fctFinThread, NULL);
     printf("Id du Thread FenetreGraphique: %u\n",pthread_self());
-    while(true)
+    while(true)   
     {
         restaurerImageInterne();
         pthread_mutex_lock(&mutexEtatJeu);// debut utilisation variable etat jeu
@@ -162,36 +143,110 @@ void *fctThreadEvenements(void *)
      {
        
         pthread_mutex_lock(&mutexEvenement);
-         evenement = lireEvenement();
-         switch(evenement)
-        {
-            case SDL_QUIT:
-             exit(0);
-
-             case SDLK_UP:
-             printf("KEY_UP\n");
-             break;
-
-             case SDLK_DOWN:
-             printf("KEY_DOWN\n");
-             break;
-
-             case SDLK_LEFT:
-             printf("KEY_LEFT\n");
-             break;
-
-             case SDLK_RIGHT:
-             printf("KEY_RIGHT\n");
-             break;
-
-             case SDLK_SPACE:
-             printf("SDLK_SPACE\n");
-        }
+        evenement = lireEvenement();
+        if (evenement == SDL_QUIT) exit(0);
+        temps.tv_sec =0;
+        temps.tv_nsec = 200000000;
         pthread_mutex_unlock(&mutexEvenement);
+        pthread_cond_signal(&condEvenement);
+        nanosleep(&temps, NULL);
     }
     pthread_cleanup_pop(1);
     pthread_exit(NULL);
 }
+
+void *fctThreadStanley(void*)
+{
+    printf("Id du Thread etatStanley: %u\n",pthread_self());
+    pthread_cleanup_push(fctFinThread, NULL);
+    while(true)
+    {
+        pthread_mutex_lock(&mutexEvenement);
+        pthread_cond_wait(&condEvenement,&mutexEvenement);
+        pthread_mutex_lock(&mutexEtatJeu);
+        switch(etatJeu.etatStanley)
+        {
+            
+            case BAS:
+                switch(evenement)
+                {
+                    case SDLK_SPACE:
+                    if ((etatJeu.positionStanley == 0) || (etatJeu.positionStanley >1))
+                    {
+                    etatJeu.actionStanley = SPRAY;
+                    pthread_mutex_unlock(&mutexEtatJeu);
+                    
+                    pthread_mutex_lock(&mutexEtatJeu);
+                    etatJeu.actionStanley = NORMAL;
+                    pthread_mutex_unlock(&mutexEtatJeu);
+                    }
+                    break;
+                    
+                    case SDLK_LEFT:
+                    if ((etatJeu.positionStanley >0) && (etatJeu.positionStanley <=3))
+                    {
+                        etatJeu.positionStanley --; 
+                        pthread_mutex_unlock(&mutexEtatJeu);
+                    }
+                    break;
+
+                    case SDLK_RIGHT:
+                    if ((etatJeu.positionStanley >=0) && (etatJeu.positionStanley <3))
+                    {
+                        etatJeu.positionStanley ++; 
+                        pthread_mutex_unlock(&mutexEtatJeu);
+                    }
+                    break;
+                    case SDLK_UP:
+                    if (etatJeu.positionStanley ==1)
+                    {
+                        etatJeu.etatStanley = ECHELLE;
+                        pthread_mutex_unlock(&mutexEtatJeu);
+                    }
+                    break;
+                } 
+            case ECHELLE:
+                switch(evenement)
+                {
+                   
+                    case SDLK_DOWN:
+                    if (etatJeu.positionStanley ==1)
+                    {
+                        etatJeu.etatStanley = BAS;
+                        pthread_mutex_unlock(&mutexEtatJeu);
+                    }
+                    if (etatJeu.positionStanley== 0)
+                    {
+                        etatJeu.positionStanley ++; 
+                        pthread_mutex_unlock(&mutexEtatJeu);
+                    }
+                    break;
+                    case SDLK_UP:
+                    if (etatJeu.positionStanley == 0)
+                    {
+                        etatJeu.positionStanley ++; 
+                        etatJeu.positionStanley ++; 
+                        etatJeu.etatStanley = HAUT;
+                        pthread_mutex_unlock(&mutexEtatJeu);
+                    }
+                    if (etatJeu.positionStanley == 1)
+                    {
+                        etatJeu.positionStanley --; 
+                        pthread_mutex_unlock(&mutexEtatJeu);
+                    }
+                    break;
+                }
+        }
+    pthread_mutex_unlock(&mutexEtatJeu);
+    evenement=AUCUN;
+    pthread_mutex_unlock(&mutexEvenement);
+    }
+
+
+    pthread_cleanup_pop(1);
+    pthread_exit(NULL);
+}
+
 void handlerSIGINT(int)
 {
     printf("Id du Thread reçu: %u\n",pthread_self());
