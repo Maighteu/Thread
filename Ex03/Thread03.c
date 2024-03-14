@@ -31,7 +31,7 @@ void fctFinThread(void *);
 pthread_t threadHandle[ThreadMax];
 struct sigaction sigAct;
 pthread_mutex_t M;
-
+//salut
 
 int main ()
 {
@@ -51,6 +51,7 @@ int main ()
 
     }
  
+
     for (int i = 0; i < ThreadMax; i++) 
 	{
     	pthread_join(threadHandle[i], (NULL));

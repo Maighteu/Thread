@@ -1,4 +1,12 @@
 #include "./presentation/presentation.h"
+#include <pthread.h> 
+#include <stdio.h> 
+#include <stdlib.h> 
+#include <unistd.h> 
+#include <signal.h> 
+#include <string.h>
+#include <time.h>
+#include <sched.h>
 
 void *fctThreadFenetreGraphique(void *);
 void *fctThreadEvenements(void *);
@@ -11,6 +19,7 @@ void *fctThreadAraigneeG(void *);
 void *fctThreadAraigneeD(void *);
 void *fctThreadInsecticideG(void *);
 void *fctThreadInsecticideD(void *);
+void fctFinThread(void *);
 
 void handlerSIGINT(int);
 void handlerSIGALRM(int);
@@ -29,11 +38,16 @@ pthread_mutex_t mutexEtatJeu;
 pthread_mutex_t mutexEvenement;
 pthread_mutex_t mutexEchec;
 
+pthread_t ThreadHandler;
+
+struct sigaction sigAct;
 typedef struct
 {
     int presence;
     pthread_t tid;
 } S_PRESENCE; 
+
+
 
 typedef struct
 {
@@ -74,54 +88,18 @@ int main(int argc, char* argv[])
 
     ouvrirFenetreGraphique();
 
-    for(i = 0; i < 6; i++)
-    {
-        afficherStanley(HAUT, i, NORMAL);
-        afficherStanley(HAUT, i, SPRAY);
-    }
+    sigset_t mask;
+    sigAct.sa_handler = handlerSIGINT;
+    sigAct.sa_flags = 0;
+    sigemptyset(&sigAct.sa_mask);
+    sigaction(SIGINT, &sigAct, NULL); 
+    sigaddset(&mask, SIGINT);
+    sigprocmask(SIG_BLOCK, &mask, NULL);
+    printf("Id du Thread main: %u\n",pthread_self());
+    pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadFenetreGraphique, NULL);
 
-    afficherStanley(ECHELLE, 0);
-    afficherStanley(ECHELLE, 1);
-
-    for(i = 0; i < 4; i++)
-    {
-        afficherStanley(BAS, i, NORMAL);
-        afficherStanley(BAS, i, SPRAY);
-    }
-
-    for(i = 0; i < 5; i++)
-    {
-        afficherAmi(i, NORMAL);
-        afficherAmi(i, TOUCHE);
-    }
-
-    for(i = 0; i < 5; i++)
-        afficherChenilleG(i);
-
-    for(i = 0; i < 7; i++)
-        afficherChenilleD(i);
-
-    for (i = 0; i < 5; i++)
-    {
-        afficherAraigneeG(i);
-        afficherAraigneeD(i);
-    }
-
-    for(i = 0; i < 4; i++)
-    {
-        afficherInsecticideG(i);
-        afficherInsecticideD(i + 1);
-    }
-
-    afficherGuepe(0);
-    afficherGuepe(1);
-
-    afficherEchecs(3);
-
-    afficherScore(0);
-
-    actualiserFenetreGraphique();
-    while(1)
+    pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadEvenements, NULL);
+   /* while(1)
     {
         evenement = lireEvenement();
 
@@ -149,5 +127,77 @@ int main(int argc, char* argv[])
             case SDLK_SPACE:
                 printf("SDLK_SPACE\n");
         }
+    }*/
+    pause();
+}
+
+void* fctThreadFenetreGraphique(void*)
+{
+    int i;
+    pthread_cleanup_push(fctFinThread, NULL);
+    printf("Id du Thread FenetreGraphique: %u\n",pthread_self());
+    while(true)
+    {
+        restaurerImageInterne();
+        pthread_mutex_lock(&mutexEtatJeu);// debut utilisation variable etat jeu
+        afficherScore(etatJeu.score);
+        afficherEchecs(etatJeu.nbEchecs);
+        afficherStanley(etatJeu.etatStanley, etatJeu.positionStanley, etatJeu.actionStanley);
+
+        for(i = 0; i < 5; i++)
+         {
+         afficherAmi(i, etatJeu.etatAmis[i]);
+         }
+        pthread_mutex_unlock(&mutexEtatJeu);//fin utilisation variable etat jeu
+        actualiserFenetreGraphique();
     }
+    pthread_cleanup_pop(1);
+    pthread_exit(NULL);
+}
+void *fctThreadEvenements(void *)
+{
+    printf("Id du Thread Evenement: %u\n",pthread_self());
+    pthread_cleanup_push(fctFinThread, NULL);
+    while(1)
+     {
+       
+        pthread_mutex_lock(&mutexEvenement);
+         evenement = lireEvenement();
+         switch(evenement)
+        {
+            case SDL_QUIT:
+             exit(0);
+
+             case SDLK_UP:
+             printf("KEY_UP\n");
+             break;
+
+             case SDLK_DOWN:
+             printf("KEY_DOWN\n");
+             break;
+
+             case SDLK_LEFT:
+             printf("KEY_LEFT\n");
+             break;
+
+             case SDLK_RIGHT:
+             printf("KEY_RIGHT\n");
+             break;
+
+             case SDLK_SPACE:
+             printf("SDLK_SPACE\n");
+        }
+        pthread_mutex_unlock(&mutexEvenement);
+    }
+    pthread_cleanup_pop(1);
+    pthread_exit(NULL);
+}
+void handlerSIGINT(int)
+{
+    printf("Id du Thread reçu: %u\n",pthread_self());
+}
+
+void fctFinThread(void *)
+{
+    printf("fctFinThread : Tid du thread Terminé: %ld\n", pthread_self());
 }
