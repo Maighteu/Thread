@@ -7,6 +7,8 @@
 #include <string.h>
 #include <time.h>
 #include <sched.h>
+#include<math.h>
+
 
 void *fctThreadFenetreGraphique(void *);
 void *fctThreadEvenements(void *);
@@ -40,7 +42,8 @@ pthread_mutex_t mutexEchec;
 
 pthread_t ThreadHandler;
 
-struct sigaction sigAct;
+
+struct timespec AttenteEnnemi;
 
 typedef struct
 {
@@ -85,6 +88,8 @@ int echec = AUCUN;
 
 int main(int argc, char* argv[])
 {
+    struct sigaction sigAct;
+
     int i;
     pthread_mutex_init (&mutexEvenement,NULL);
     pthread_mutex_init (&mutexEtatJeu,NULL);
@@ -93,21 +98,38 @@ int main(int argc, char* argv[])
     pthread_cond_init(&condEvenement,NULL);
     pthread_cond_init (&condEchec,NULL);
 
+    pthread_key_create(&keySpec, NULL);
+
     ouvrirFenetreGraphique();
 
-    sigset_t mask;
-    sigAct.sa_handler = handlerSIGINT;
+    sigfillset(&sigAct.sa_mask);
+
     sigAct.sa_flags = 0;
-    sigemptyset(&sigAct.sa_mask);
+    sigfillset(&sigAct.sa_mask);
+
+    sigAct.sa_handler = handlerSIGALRM;
+    sigaction(SIGALRM, &sigAct, NULL); 
+
+    sigAct.sa_handler = handlerSIGINT;
     sigaction(SIGINT, &sigAct, NULL); 
-    sigaddset(&mask, SIGINT);
-    sigprocmask(SIG_BLOCK, &mask, NULL);
+
+    sigAct.sa_handler = handlerSIGUSR1;
+    sigaction(SIGUSR1, &sigAct, NULL); 
+
+    sigAct.sa_handler = handlerSIGUSR2;
+    sigaction(SIGUSR2, &sigAct, NULL); 
+
+    sigAct.sa_handler = handlerSIGQUIT ;
+    sigaction(SIGQUIT, &sigAct, NULL); 
+
+
     printf("Id du Thread main: %u\n",pthread_self());
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadFenetreGraphique, NULL);
 
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadEvenements, NULL);
 
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadStanley, NULL);
+    pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadEnnemis, NULL);
 
     pause();
 }
@@ -290,11 +312,119 @@ void *fctThreadStanley(void*)
     pthread_exit(NULL);
 }
 
+void *fctThreadEnnemis(void *)
+{
+    sigset_t mask;
+    sigfillset (&mask);
+
+    int attente, spawn;
+    struct timespec *tempsennemi = (struct timespec*) malloc (sizeof (struct timespec));
+    tempsennemi->tv_sec = 1;
+    tempsennemi->tv_nsec = 600000000;
+    sigdelset(&mask, SIGALRM);
+
+    pthread_setspecific(keySpec, &tempsennemi);
+    
+    alarm(10);
+
+    while(1)
+    {
+
+        AttenteEnnemi.tv_sec = tempsennemi->tv_sec;
+        AttenteEnnemi.tv_nsec = tempsennemi->tv_nsec;
+
+        
+
+
+        nanosleep(&AttenteEnnemi, NULL);//doit avoir un pthread specific
+        spawn = rand() %5;
+        switch(spawn)
+        {
+            case 0:
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
+            break;
+
+            case 1:
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleG, NULL);
+            break;
+
+            case 2:
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleD, NULL);
+            break;
+
+            case 3:
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadAraigneeG, NULL);
+            break;
+
+            case 4:
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadAraigneeD, NULL);
+            break;
+        }
+    
+
+    }
+
+
+}
+
+void *fctThreadGuepe(void *)
+{
+
+}
+
+void *fctThreadChenilleG(void *)
+{
+
+}
+
+void *fctThreadChenilleD(void *)
+{
+
+}
+
+void *fctThreadAraigneeG(void *)
+{
+
+}
+
+void *fctThreadAraigneeD(void *)
+{
+
+}
+
 void handlerSIGINT(int)
 {
     printf("Id du Thread reçu: %u\n",pthread_self());
 }
 
+void handlerSIGALRM(int)
+{
+    struct timespec* attente;
+    fprintf(stderr,"\nhandler sialrm\n");
+    attente = (struct timespec *) pthread_getspecific (keySpec);
+
+    (attente->tv_sec) =1;
+    fprintf(stderr,"\nhandler sialrm2.1\n");
+
+    (attente->tv_nsec) = (100000000 *(( rand()% 5) +1));
+    fprintf(stderr,"\nhandler sialrm3\n");
+
+    alarm(10);
+        fprintf(stderr,"\nhandler sialrm4\n");
+
+}
+void handlerSIGUSR1(int)
+{
+    printf("Id du Thread reçu: %u\n",pthread_self());
+}
+void handlerSIGUSR2(int)
+{
+    printf("Id du Thread reçu: %u\n",pthread_self());
+}
+void handlerSIGQUIT(int)
+{
+    printf("Id du Thread reçu: %u\n",pthread_self());
+}
 void fctFinThread(void *)
 {
     printf("fctFinThread : Tid du thread Terminé: %ld\n", pthread_self());
