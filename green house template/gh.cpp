@@ -73,7 +73,9 @@ typedef struct
 S_ETAT_JEU etatJeu = 
      { BAS, 1, NORMAL,
        { NORMAL, NORMAL, NORMAL, NORMAL, NORMAL },
+
        { { AUCUN, 0 }, { AUCUN, 0 } },
+
        { { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 } },
        { { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 }, { AUCUN, 0 }, 
          { AUCUN, 0 }, { AUCUN, 0 } },
@@ -151,6 +153,32 @@ void* fctThreadFenetreGraphique(void*)
          {
          afficherAmi(i, etatJeu.etatAmis[i]);
          }
+
+         for(i = 0; i < 2; i++)
+         {
+            if ( etatJeu.guepes[i].presence == NORMAL) afficherGuepe(i);
+         }
+
+         for(i = 0; i < 6; i++)
+         {
+            if ( etatJeu.araigneesG[i].presence == NORMAL) afficherGuepe(i);
+         }
+
+         for(i = 0; i < 6; i++)
+         {
+            if ( etatJeu.araigneesD[i].presence == NORMAL) afficherGuepe(i);
+         }
+
+         for(i = 0; i < 6; i++)
+         {
+            if ( etatJeu.chenillesG[i].presence == NORMAL) afficherGuepe(i);
+         }
+
+         for(i = 0; i < 8; i++)
+         {
+            if ( etatJeu.chenillesD[i].presence == NORMAL) afficherGuepe(i);
+         }
+
         pthread_mutex_unlock(&mutexEtatJeu);//fin utilisation variable etat jeu
         actualiserFenetreGraphique();
     }
@@ -319,19 +347,22 @@ void *fctThreadEnnemis(void *)
 
     int attente, spawn;
     struct timespec *tempsennemi = (struct timespec*) malloc (sizeof (struct timespec));
+    signed int change = 600000000;
+
     tempsennemi->tv_sec = 1;
-    tempsennemi->tv_nsec = 600000000;
+    tempsennemi->tv_nsec = change;
     sigdelset(&mask, SIGALRM);
 
-    pthread_setspecific(keySpec, &tempsennemi);
+    //pthread_setspecific(keySpec, &change);
     
     alarm(10);
 
     while(1)
     {
+        printf("coucou\n");
 
         AttenteEnnemi.tv_sec = tempsennemi->tv_sec;
-        AttenteEnnemi.tv_nsec = tempsennemi->tv_nsec;
+        AttenteEnnemi.tv_nsec = change;
 
         
 
@@ -399,18 +430,14 @@ void handlerSIGINT(int)
 
 void handlerSIGALRM(int)
 {
-    struct timespec* attente;
-    fprintf(stderr,"\nhandler sialrm\n");
-    attente = (struct timespec *) pthread_getspecific (keySpec);
+   // signed int* attente;
+   // attente = (signed int*) pthread_getspecific (keySpec);
+    // (attente->tv_sec) =1;
+    // (attente->tv_nsec) = (100000000 *(( rand()% 5) +1));
+    //*attente = (100000000 *(( rand()% 5) +1));
 
-    (attente->tv_sec) =1;
-    fprintf(stderr,"\nhandler sialrm2.1\n");
+    //alarm(10);
 
-    (attente->tv_nsec) = (100000000 *(( rand()% 5) +1));
-    fprintf(stderr,"\nhandler sialrm3\n");
-
-    alarm(10);
-        fprintf(stderr,"\nhandler sialrm4\n");
 
 }
 void handlerSIGUSR1(int)
