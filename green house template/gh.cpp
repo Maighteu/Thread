@@ -1,3 +1,4 @@
+#pragma GCC diagnostic ignored "-fpermissive"
 #include "./presentation/presentation.h"
 #include <pthread.h> 
 #include <stdio.h> 
@@ -8,6 +9,7 @@
 #include <time.h>
 #include <sched.h>
 #include<math.h>
+
 
 
 void *fctThreadFenetreGraphique(void *);
@@ -133,7 +135,8 @@ int main(int argc, char* argv[])
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadStanley, NULL);
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadEnnemis, NULL);
 
-    pause();
+    pthread_join(ThreadHandler, NULL);
+
 }
 
 void* fctThreadFenetreGraphique(void*)
@@ -345,50 +348,44 @@ void *fctThreadEnnemis(void *)
     sigset_t mask;
     sigfillset (&mask);
 
-    int attente, spawn;
-    struct timespec *tempsennemi = (struct timespec*) malloc (sizeof (struct timespec));
-    signed int change = 600000000;
+    int spawn;
+    int *tempsennemi = (int*) malloc (sizeof (int));
+    *tempsennemi=16;
 
-    tempsennemi->tv_sec = 1;
-    tempsennemi->tv_nsec = change;
-    sigdelset(&mask, SIGALRM);
+    pthread_setspecific(keySpec,(void*)tempsennemi);
+    //sigdelset(&mask, SIGALRM);
 
-    //pthread_setspecific(keySpec, &change);
     
     alarm(10);
 
     while(1)
     {
         printf("coucou\n");
-
-        AttenteEnnemi.tv_sec = tempsennemi->tv_sec;
-        AttenteEnnemi.tv_nsec = change;
-
-        
-
+        AttenteEnnemi.tv_sec = (*tempsennemi/10);
+        AttenteEnnemi.tv_nsec = ( 100000000*(*tempsennemi%10));
 
         nanosleep(&AttenteEnnemi, NULL);//doit avoir un pthread specific
         spawn = rand() %5;
         switch(spawn)
         {
             case 0:
-            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
+            //pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
             break;
 
             case 1:
-            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleG, NULL);
+           // pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleG, NULL);
             break;
 
             case 2:
-            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleD, NULL);
+            //pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleD, NULL);
             break;
 
             case 3:
-            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadAraigneeG, NULL);
+            //pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadAraigneeG, NULL);
             break;
 
             case 4:
-            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadAraigneeD, NULL);
+           // pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadAraigneeD, NULL);
             break;
         }
     
@@ -428,16 +425,16 @@ void handlerSIGINT(int)
     printf("Id du Thread reçu: %u\n",pthread_self());
 }
 
-void handlerSIGALRM(int)
+void handlerSIGALRM(int )
 {
-   // signed int* attente;
-   // attente = (signed int*) pthread_getspecific (keySpec);
-    // (attente->tv_sec) =1;
-    // (attente->tv_nsec) = (100000000 *(( rand()% 5) +1));
-    //*attente = (100000000 *(( rand()% 5) +1));
-
-    //alarm(10);
-
+    printf("\nentre");
+    int *attente;
+    attente = (int *) pthread_getspecific(keySpec);
+    int value = *attente;
+    value = (10 + (rand() %5)+ 1);
+    *attente = value;
+    printf("\nsortie");
+    alarm(10);
 
 }
 void handlerSIGUSR1(int)
@@ -456,3 +453,6 @@ void fctFinThread(void *)
 {
     printf("fctFinThread : Tid du thread Terminé: %ld\n", pthread_self());
 }
+
+  
+  
