@@ -1,4 +1,3 @@
-#pragma GCC diagnostic ignored "-fpermissive"
 #include "./presentation/presentation.h"
 #include <pthread.h> 
 #include <stdio.h> 
@@ -37,6 +36,8 @@ pthread_cond_t condEvenement;
 pthread_cond_t condEchec;
 
 pthread_key_t keySpec;
+pthread_key_t keyGuepe;
+
 
 pthread_mutex_t mutexEtatJeu;
 pthread_mutex_t mutexEvenement;
@@ -92,7 +93,6 @@ int echec = AUCUN;
 
 int main(int argc, char* argv[])
 {
-    struct sigaction sigAct;
 
     int i;
     pthread_mutex_init (&mutexEvenement,NULL);
@@ -102,14 +102,13 @@ int main(int argc, char* argv[])
     pthread_cond_init(&condEvenement,NULL);
     pthread_cond_init (&condEchec,NULL);
 
-    pthread_key_create(&keySpec, NULL);
+    pthread_key_create(&keySpec, destructeurVS);
 
     ouvrirFenetreGraphique();
-
-    sigfillset(&sigAct.sa_mask);
-
+   
+    struct sigaction sigAct;
     sigAct.sa_flags = 0;
-    sigfillset(&sigAct.sa_mask);
+    sigemptyset(&sigAct.sa_mask);
 
     sigAct.sa_handler = handlerSIGALRM;
     sigaction(SIGALRM, &sigAct, NULL); 
@@ -126,6 +125,15 @@ int main(int argc, char* argv[])
     sigAct.sa_handler = handlerSIGQUIT ;
     sigaction(SIGQUIT, &sigAct, NULL); 
 
+    sigaddset(&sigAct.sa_mask,SIGALRM);
+    sigaddset(&sigAct.sa_mask,SIGINT);
+    sigaddset(&sigAct.sa_mask,SIGUSR1);
+    sigaddset(&sigAct.sa_mask,SIGUSR2);
+    sigaddset(&sigAct.sa_mask,SIGQUIT);
+
+    sigset_t mask;
+    sigfillset(&mask);
+    sigprocmask(SIG_BLOCK, &mask,NULL);
 
     printf("Id du Thread main: %u\n",pthread_self());
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadFenetreGraphique, NULL);
@@ -134,6 +142,13 @@ int main(int argc, char* argv[])
 
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadStanley, NULL);
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadEnnemis, NULL);
+             while (etatJeu.nbEchecs<3)
+        {
+             pthread_cond_wait(&condEchec,&mutexEchec);
+             //etatJeu.nbEchecs ++;
+             pthread_mutex_unlock(&mutexEchec);
+        }
+
 
     pthread_join(ThreadHandler, NULL);
 
@@ -141,6 +156,9 @@ int main(int argc, char* argv[])
 
 void* fctThreadFenetreGraphique(void*)
 {
+        sigset_t mask;
+    sigfillset(&mask);
+    sigprocmask(SIG_BLOCK, &mask,NULL);
     int i;
     pthread_cleanup_push(fctFinThread, NULL);
     printf("Id du Thread FenetreGraphique: %u\n",pthread_self());
@@ -181,8 +199,12 @@ void* fctThreadFenetreGraphique(void*)
          {
             if ( etatJeu.chenillesD[i].presence == NORMAL) afficherGuepe(i);
          }
+        
+         pthread_mutex_unlock(&mutexEtatJeu);//fin utilisation variable etat jeu
 
-        pthread_mutex_unlock(&mutexEtatJeu);//fin utilisation variable etat jeu
+  
+
+        
         actualiserFenetreGraphique();
     }
     pthread_cleanup_pop(1);
@@ -190,11 +212,15 @@ void* fctThreadFenetreGraphique(void*)
 }
 void *fctThreadEvenements(void *)
 {
+    sigset_t mask;
+    sigfillset(&mask);
+    sigprocmask(SIG_BLOCK, &mask,NULL);
     printf("Id du Thread Evenement: %u\n",pthread_self());
     pthread_cleanup_push(fctFinThread, NULL);
     while(1)
      {
-       
+      
+
         pthread_mutex_lock(&mutexEvenement);
         evenement = lireEvenement(); 
         if (evenement == SDL_QUIT) exit(0);
@@ -203,6 +229,13 @@ void *fctThreadEvenements(void *)
         pthread_mutex_unlock(&mutexEvenement);
         pthread_cond_signal(&condEvenement);
         nanosleep(&temps, NULL);
+
+        pthread_mutex_lock(&mutexEtatJeu);
+        etatJeu.actionStanley = NORMAL;
+        pthread_mutex_unlock(&mutexEtatJeu);
+
+
+
     }
     pthread_cleanup_pop(1);
     pthread_exit(NULL);
@@ -210,6 +243,12 @@ void *fctThreadEvenements(void *)
 
 void *fctThreadStanley(void*)
 {
+    struct timespec attentemort;
+    attentemort.tv_nsec= 200000000;
+    int i;
+    sigset_t mask;
+    sigfillset(&mask);
+    sigprocmask(SIG_BLOCK, &mask,NULL);
     printf("Id du Thread etatStanley: %u\n",pthread_self());
     pthread_cleanup_push(fctFinThread, NULL);
     while(true)
@@ -227,11 +266,26 @@ void *fctThreadStanley(void*)
                     if ((etatJeu.positionStanley == 0) || (etatJeu.positionStanley >1))
                     {
                     etatJeu.actionStanley = SPRAY;
+
+                    if (etatJeu.positionStanley == 2)
+                    {
+
+                        for (i= 0;i<2;i++)
+                        {
+
+                            if (etatJeu.guepes[i].presence == NORMAL) 
+                            {
+                                printf("\n%d\n",i);
+                                printf("\n id du thread kill %d",etatJeu.guepes[i].tid);
+                                pthread_kill(etatJeu.guepes[i].tid, SIGINT);
+                                etatJeu.score ++;
+                            }
+                        }
+                    }
+
                     pthread_mutex_unlock(&mutexEtatJeu);
                     
-                    pthread_mutex_lock(&mutexEtatJeu);
-                    etatJeu.actionStanley = NORMAL;
-                    pthread_mutex_unlock(&mutexEtatJeu);
+                    
                     }
                     break;
                     
@@ -295,14 +349,12 @@ void *fctThreadStanley(void*)
                 switch(evenement)
                 {
                     case SDLK_SPACE:
-                        if ((etatJeu.positionStanley <= 1) || (etatJeu.positionStanley >5))
+                        if ((etatJeu.positionStanley <= 1) || ((etatJeu.positionStanley <=5)&& (etatJeu.positionStanley >2)))
                         {
                         etatJeu.actionStanley = SPRAY;
                         pthread_mutex_unlock(&mutexEtatJeu);
                         
-                        pthread_mutex_lock(&mutexEtatJeu);
-                        etatJeu.actionStanley = NORMAL;
-                        pthread_mutex_unlock(&mutexEtatJeu);
+                       
                         }
                     break;
                     
@@ -345,22 +397,23 @@ void *fctThreadStanley(void*)
 
 void *fctThreadEnnemis(void *)
 {
+
     sigset_t mask;
     sigfillset (&mask);
-
-    int spawn;
+    sigdelset(&mask, SIGALRM);
+     sigprocmask(SIG_SETMASK, &mask,NULL);
+    int spawn ;
     int *tempsennemi = (int*) malloc (sizeof (int));
     *tempsennemi=16;
 
-    pthread_setspecific(keySpec,(void*)tempsennemi);
-    //sigdelset(&mask, SIGALRM);
+    pthread_setspecific(keySpec,tempsennemi);
+    sigdelset(&mask, SIGALRM);
 
     
     alarm(10);
 
     while(1)
     {
-        printf("coucou\n");
         AttenteEnnemi.tv_sec = (*tempsennemi/10);
         AttenteEnnemi.tv_nsec = ( 100000000*(*tempsennemi%10));
 
@@ -369,7 +422,8 @@ void *fctThreadEnnemis(void *)
         switch(spawn)
         {
             case 0:
-            //pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
+            printf("\ncreation thread guepe");
             break;
 
             case 1:
@@ -397,7 +451,66 @@ void *fctThreadEnnemis(void *)
 
 void *fctThreadGuepe(void *)
 {
+    sigset_t mask;
+    sigfillset(&mask);
+    sigdelset(&mask, SIGINT);
+    sigprocmask(SIG_SETMASK, &mask, NULL);
 
+    printf("\nId du Thread guepe: %u\n",pthread_self());
+
+
+     int* position = (int*) malloc (sizeof (int));
+     *position = 0;
+    pthread_mutex_lock (&mutexEtatJeu);
+    etatJeu.guepes[*position].presence = NORMAL;
+    etatJeu.guepes[*position].tid = pthread_self();
+    pthread_mutex_unlock(&mutexEtatJeu);
+    
+    struct timespec AttenteGuepe;
+    AttenteGuepe.tv_sec = 1 ;
+    AttenteGuepe.tv_nsec = 0;
+   pthread_setspecific(keySpec, position);
+    
+    pthread_mutex_lock(&mutexEtatJeu);
+    if (etatJeu.etatStanley==BAS&&etatJeu.positionStanley==2 && etatJeu.actionStanley== SPRAY)
+    {
+        etatJeu.guepes[*position].presence= AUCUN;
+         etatJeu.guepes[*position].tid= 0;
+        etatJeu.score++;
+        pthread_mutex_unlock(&mutexEtatJeu);
+        pthread_exit(0);
+    }
+    pthread_mutex_unlock(&mutexEtatJeu);
+    //event deplacement
+        nanosleep(&AttenteGuepe, NULL);
+        (*position)++;
+
+        pthread_mutex_lock (&mutexEtatJeu);
+        etatJeu.guepes[*position].presence = NORMAL;
+        etatJeu.guepes[*position].tid =pthread_self();
+        etatJeu.guepes[*position-1].presence = AUCUN;
+        etatJeu.guepes[*position-1].tid = 0;
+        pthread_mutex_unlock(&mutexEtatJeu);
+
+    //event dmg
+        nanosleep(&AttenteGuepe, NULL);
+
+
+        pthread_mutex_lock (&mutexEchec);
+        echec = CHAT;
+        pthread_mutex_unlock(&mutexEchec);
+        pthread_cond_signal(&condEchec);
+
+        AttenteGuepe.tv_nsec = 500000000;
+
+        nanosleep(&AttenteGuepe, NULL);
+        pthread_mutex_lock (&mutexEtatJeu);
+        etatJeu.guepes[*position].presence = AUCUN;
+        etatJeu.guepes[*position].tid = 0;
+        pthread_mutex_unlock(&mutexEtatJeu);
+        pthread_exit(0);
+
+        
 }
 
 void *fctThreadChenilleG(void *)
@@ -422,18 +535,20 @@ void *fctThreadAraigneeD(void *)
 
 void handlerSIGINT(int)
 {
-    printf("Id du Thread reçu: %u\n",pthread_self());
+
+    int *positionMort = (int *) pthread_getspecific(keySpec);
+    pthread_mutex_lock(&mutexEtatJeu);
+    etatJeu.guepes[*positionMort].presence = AUCUN;
+    etatJeu.guepes[*positionMort].tid = 0;
+    pthread_mutex_unlock(&mutexEtatJeu);
+    pthread_exit(0);
 }
 
 void handlerSIGALRM(int )
 {
-    printf("\nentre");
-    int *attente;
-    attente = (int *) pthread_getspecific(keySpec);
-    int value = *attente;
-    value = (10 + (rand() %5)+ 1);
+    int *attente = (int *) pthread_getspecific(keySpec);
+    int value = (10 + (rand() %5)+ 1);
     *attente = value;
-    printf("\nsortie");
     alarm(10);
 
 }
@@ -455,4 +570,8 @@ void fctFinThread(void *)
 }
 
   
-  
+  void destructeurVS(void *p)
+{
+
+    free(p);
+}
