@@ -188,7 +188,10 @@ void* fctThreadFenetreGraphique(void*)
     printf("Id du Thread FenetreGraphique: %u\n",pthread_self());
     while(true)   
     {   
-       
+        pthread_mutex_lock(&mutexEchec);
+        if (echec == AUCUN)
+        {
+        pthread_mutex_unlock(&mutexEchec);
 
         restaurerImageInterne();
         pthread_mutex_lock(&mutexEtatJeu);// debut utilisation variable etat jeu
@@ -234,8 +237,13 @@ void* fctThreadFenetreGraphique(void*)
         actualiserFenetreGraphique();
 
     }
-  
+    else
+    {
+        pthread_mutex_unlock(&mutexEchec);
+        pthread_mutex_unlock(&mutexEtatJeu);
+    }
 
+    }
     pthread_cleanup_pop(1);
     pthread_exit(NULL);
 }
@@ -250,6 +258,9 @@ void *fctThreadEvenements(void *)
     {
       
     pthread_mutex_lock(&mutexEchec);
+    if (echec == AUCUN)
+    {
+    pthread_mutex_unlock(&mutexEchec);
     
         pthread_mutex_lock(&mutexEvenement);
         evenement = lireEvenement(); 
@@ -266,8 +277,15 @@ void *fctThreadEvenements(void *)
 
 
     }
-    
+    else 
+        {
+            pthread_mutex_unlock(&mutexEchec);
+            pthread_mutex_unlock(&mutexEtatJeu);
 
+            printf("\nevent");
+        }
+
+    }
     pthread_cleanup_pop(1);
     pthread_exit(NULL);
 }
@@ -285,6 +303,10 @@ void *fctThreadStanley(void*)
     pthread_cleanup_push(fctFinThread, NULL);
     while(true)
     {
+    pthread_mutex_lock(&mutexEchec);
+    if (echec == AUCUN)
+    {
+    pthread_mutex_unlock(&mutexEchec);
         pthread_mutex_lock(&mutexEvenement);
         pthread_cond_wait(&condEvenement,&mutexEvenement);
         pthread_mutex_lock(&mutexEtatJeu);
@@ -424,6 +446,15 @@ void *fctThreadStanley(void*)
     pthread_mutex_unlock(&mutexEvenement);
     }
 
+    else 
+    {
+        pthread_mutex_unlock(&mutexEtatJeu);
+
+        pthread_mutex_unlock(&mutexEchec);
+        printf("\nStanley");
+    }
+
+    }
 
     pthread_cleanup_pop(1);
     pthread_exit(NULL);
@@ -454,6 +485,10 @@ void *fctThreadEnnemis(void *)
 
         nanosleep(&AttenteEnnemi, NULL);//doit avoir un pthread specific
         spawn = rand() %5;
+        pthread_mutex_lock(&mutexEchec);
+        if (echec == AUCUN)
+        {
+        pthread_mutex_unlock(&mutexEchec);
         switch(spawn)
         {
             case 0:
@@ -478,7 +513,14 @@ void *fctThreadEnnemis(void *)
             break;
         }
     
-    
+    }
+    else 
+    {
+        pthread_mutex_unlock(&mutexEtatJeu);
+
+        pthread_mutex_unlock(&mutexEchec);
+        printf("echec");
+    }
 
     }
 
@@ -506,6 +548,8 @@ void *fctThreadGuepe(void *)
     AttenteGuepe.tv_sec = 1 ;
     AttenteGuepe.tv_nsec = 0;
    pthread_setspecific(keySpec, position);
+    if(echec==AUCUN)
+    {
     pthread_mutex_lock(&mutexEtatJeu);
     if (etatJeu.etatStanley==BAS&&etatJeu.positionStanley==2 && etatJeu.actionStanley== SPRAY)
     {
@@ -529,6 +573,19 @@ void *fctThreadGuepe(void *)
 
     //event dmg
         nanosleep(&AttenteGuepe, NULL);
+
+
+
+    }
+    else
+    {
+        printf("\nGuepe");
+        pthread_mutex_unlock(&mutexEtatJeu);
+                pthread_mutex_unlock(&mutexEchec);
+
+
+    }
+
         pthread_mutex_lock (&mutexEchec);
         echec = CHAT;
         pthread_mutex_unlock(&mutexEchec);
@@ -542,12 +599,6 @@ void *fctThreadGuepe(void *)
         etatJeu.guepes[*position].tid = 0;
         pthread_mutex_unlock(&mutexEtatJeu);
         pthread_exit(0);
-
-
-    
-   
-
-       
         
 }
 
@@ -583,6 +634,7 @@ void handlerSIGINT(int)
     pthread_mutex_unlock(&mutexEtatJeu);
     pthread_exit(0);
 
+    pthread_mutex_lock(&mutexEchec);
 
 }
 
