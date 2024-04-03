@@ -610,15 +610,15 @@ void *fctThreadEnnemis(void *)
         switch(spawn)
         {
             case 0:
-           // pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
             break;
 
             case 1:
-            //pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleG, NULL);
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleG, NULL);
             break;
 
             case 2:
-           // pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleD, NULL);
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleD, NULL);
             break;
 
             case 3:
