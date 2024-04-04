@@ -44,6 +44,7 @@ pthread_mutex_t mutexEvenement;
 pthread_mutex_t mutexEchec;
 
 pthread_t ThreadHandler;
+pthread_t HandlerEvent;
 
 
 struct timespec AttenteEnnemi;
@@ -147,7 +148,7 @@ int main(int argc, char* argv[])
     printf("Id du Thread main: %u\n",pthread_self());
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadFenetreGraphique, NULL);
 
-    pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadEvenements, NULL);
+    pthread_create(&HandlerEvent, NULL, (void*(*)(void*)) fctThreadEvenements, NULL);
 
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadStanley, NULL);
     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadEnnemis, NULL);
@@ -155,26 +156,27 @@ int main(int argc, char* argv[])
         while (etatJeu.nbEchecs<3)
         {
             pthread_mutex_unlock(&mutexEtatJeu);
-
+            printf("\nattente damage");
             pthread_cond_wait(&condEchec,&mutexEchec);
-  
+            printf("\ndamage");
 
-             etatJeu.nbEchecs ++;
+
+             //etatJeu.nbEchecs ++;
              etatJeu.etatAmis[echec] = TOUCHE; 
-         for(i = 0; i < 1; i++)
+         for(i = 0; i < 2; i++)
          {
             if ( etatJeu.guepes[i].presence == NORMAL) pthread_kill(etatJeu.guepes[i].tid, SIGINT);
          }
 
          for(i = 0; i < 4; i++)
          {
-            if ( etatJeu.araigneesG[i].presence == NORMAL) pthread_kill(etatJeu.araigneesG[4].tid, SIGUSR2);
+            if ( etatJeu.araigneesG[i].presence == NORMAL) pthread_kill(etatJeu.araigneesG[i].tid, SIGUSR2);
 ;
          }
 
          for(i = 0; i < 4; i++)
          {
-            if ( etatJeu.araigneesD[i].presence == NORMAL)  pthread_kill(etatJeu.araigneesD[4].tid, SIGUSR2);
+            if ( etatJeu.araigneesD[i].presence == NORMAL)  pthread_kill(etatJeu.araigneesD[i].tid, SIGUSR2);
 ;
          }
 
@@ -202,10 +204,11 @@ int main(int argc, char* argv[])
             pthread_mutex_unlock(&mutexEtatJeu);
 
 
+
         }
 
 
-    pthread_join(ThreadHandler, NULL);
+    pthread_join(HandlerEvent, NULL);
 
 }
 
@@ -253,6 +256,14 @@ void* fctThreadFenetreGraphique(void*)
          {
          afficherAmi(i, etatJeu.etatAmis[i]);
          }
+         for(i = 0; i <4; i++)
+         {
+            if ( etatJeu.insecticidesG[i].presence == NORMAL) afficherInsecticideG(i);
+         }
+         for(i = 0; i <4; i++)
+         {
+            if ( etatJeu.insecticidesD[i].presence == NORMAL) afficherInsecticideD(i);
+         }
 
 
         
@@ -276,8 +287,10 @@ void *fctThreadEvenements(void *)
     sigprocmask(SIG_BLOCK, &mask,NULL);
     printf("Id du Thread Evenement: %u\n",pthread_self());
     pthread_cleanup_push(fctFinThread, NULL);
-    while(1)
+    pthread_mutex_lock(&mutexEtatJeu);
+    while (etatJeu.nbEchecs<3)
     {
+    pthread_mutex_unlock(&mutexEtatJeu);
       
     pthread_mutex_lock(&mutexEchec);
     if (echec == AUCUN)
@@ -307,6 +320,13 @@ void *fctThreadEvenements(void *)
         }
 
     }
+    while(1)
+    {
+         pthread_mutex_lock(&mutexEvenement);
+        evenement = lireEvenement(); 
+        if (evenement == SDL_QUIT) exit(0);
+        pthread_mutex_unlock(&mutexEvenement);
+    }
     pthread_cleanup_pop(1);
     pthread_exit(NULL);
 }
@@ -322,8 +342,10 @@ void *fctThreadStanley(void*)
     sigprocmask(SIG_BLOCK, &mask,NULL);
     printf("Id du Thread etatStanley: %u\n",pthread_self());
     pthread_cleanup_push(fctFinThread, NULL);
-    while(true)
+    pthread_mutex_lock(&mutexEtatJeu);
+    while (etatJeu.nbEchecs<3)
     {
+    pthread_mutex_unlock(&mutexEtatJeu);
     pthread_mutex_lock(&mutexEchec);
     if (echec == AUCUN)
     {
@@ -347,7 +369,6 @@ void *fctThreadStanley(void*)
 
                         for (i= 0;i<2;i++)
                         {
-
                             if (etatJeu.guepes[i].presence == NORMAL) 
                             {
                                 printf("\n%d\n",i);
@@ -366,6 +387,10 @@ void *fctThreadStanley(void*)
                             pthread_kill(etatJeu.araigneesG[4].tid, SIGUSR2);
                             etatJeu.score ++;
                         }
+                        // else 
+                        // {
+                        //     pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadInsecticideG, NULL);
+                        // }
 
                     }
                     if (etatJeu.positionStanley == 3)
@@ -377,6 +402,7 @@ void *fctThreadStanley(void*)
                             pthread_kill(etatJeu.araigneesD[0].tid, SIGUSR2);
                             etatJeu.score ++;
                         }
+
 
                     }
                     pthread_mutex_unlock(&mutexEtatJeu);
@@ -476,6 +502,7 @@ void *fctThreadStanley(void*)
                                         pthread_kill(etatJeu.chenillesG[i].tid, SIGUSR1);
                                         etatJeu.score ++;
                                     }
+
                                 }   
                             }
                         }
@@ -595,9 +622,10 @@ void *fctThreadEnnemis(void *)
     
     alarm(10);
 
-    while(1)
+    pthread_mutex_lock(&mutexEtatJeu);
+    while (etatJeu.nbEchecs<3)
     {
-    
+    pthread_mutex_unlock(&mutexEtatJeu);
         AttenteEnnemi.tv_sec = (*tempsennemi/10);
         AttenteEnnemi.tv_nsec = ( 100000000*(*tempsennemi%10));
 
@@ -610,15 +638,15 @@ void *fctThreadEnnemis(void *)
         switch(spawn)
         {
             case 0:
-           // pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadGuepe, NULL);
             break;
 
             case 1:
-            //pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleG, NULL);
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleG, NULL);
             break;
 
             case 2:
-           // pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleD, NULL);
+            pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadChenilleD, NULL);
             break;
 
             case 3:
@@ -628,6 +656,7 @@ void *fctThreadEnnemis(void *)
             case 4:
             pthread_create(&ThreadHandler, NULL, (void*(*)(void*)) fctThreadAraigneeD, NULL);
             break;
+
         }
     
     }
@@ -640,6 +669,7 @@ void *fctThreadEnnemis(void *)
 
     }
 
+    pthread_exit(0);
 
 }
 
@@ -708,8 +738,8 @@ void *fctThreadGuepe(void *)
         nanosleep(&AttenteGuepe, NULL);
         pthread_mutex_lock (&mutexEchec);
         echec = CHAT;
-        pthread_mutex_unlock(&mutexEchec);
         pthread_cond_signal(&condEchec);
+        pthread_mutex_unlock(&mutexEchec);
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.guepes[*position].presence = AUCUN;
         etatJeu.guepes[*position].tid = 0;
@@ -758,7 +788,6 @@ void *fctThreadChenilleG(void *)
         for(sens->position = 4; sens->position>0; sens->position--)
         {
         nanosleep(&Attente, NULL);
-        printf("\npassage");
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.chenillesG[sens->position-1].presence = NORMAL;
         etatJeu.chenillesG[sens->position-1].tid =pthread_self();   
@@ -783,9 +812,15 @@ void *fctThreadChenilleG(void *)
 
         nanosleep(&Attente, NULL);
         pthread_mutex_lock (&mutexEchec);
+         if (echec == AUCUN)
+        {
         echec = FLEUR_HG;
-        pthread_mutex_unlock(&mutexEchec);
+                printf("echecHG");
+
         pthread_cond_signal(&condEchec);
+        }
+                pthread_mutex_unlock(&mutexEchec);
+
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.chenillesG[sens->position].presence = AUCUN;
         etatJeu.chenillesG[sens->position].tid = 0;
@@ -834,7 +869,6 @@ void *fctThreadChenilleD(void *)
         for(sens->position = 0; sens->position<6; sens->position++)
         {
         nanosleep(&Attente, NULL);
-        printf("\npassage");
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.chenillesD[sens->position+1].presence = NORMAL;
         etatJeu.chenillesD[sens->position+1].tid =pthread_self();   
@@ -856,12 +890,19 @@ void *fctThreadChenilleD(void *)
 
         Attente.tv_sec = 1;
         Attente.tv_nsec = 500000000;
-
         nanosleep(&Attente, NULL);
+
         pthread_mutex_lock (&mutexEchec);
+         if (echec == AUCUN)
+        {
+                    printf("pre echecHD");
+
         echec = FLEUR_HD;
-        pthread_mutex_unlock(&mutexEchec);
+        printf("echecHD");
         pthread_cond_signal(&condEchec);
+        }
+        pthread_mutex_unlock(&mutexEchec);
+
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.chenillesD[sens->position].presence = AUCUN;
         etatJeu.chenillesD[sens->position].tid = 0;
@@ -907,7 +948,6 @@ void *fctThreadAraigneeG(void *)
         for(sens->position = 0; sens->position<4; sens->position++)
         {
         nanosleep(&Attente, NULL);
-        printf("\npassage");
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.araigneesG[sens->position+1].presence = NORMAL;
         etatJeu.araigneesG[sens->position+1].tid =pthread_self();   
@@ -931,9 +971,14 @@ void *fctThreadAraigneeG(void *)
 
         nanosleep(&Attente, NULL);
         pthread_mutex_lock (&mutexEchec);
+        if (echec == AUCUN)
+        {
         echec = FLEUR_BG;
-        pthread_mutex_unlock(&mutexEchec);
+                printf("echecBG");
+
         pthread_cond_signal(&condEchec);
+        }
+        pthread_mutex_unlock(&mutexEchec);
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.araigneesG[sens->position].presence = AUCUN;
         etatJeu.araigneesG[sens->position].tid = 0;
@@ -979,7 +1024,6 @@ void *fctThreadAraigneeD(void *)
         for(sens->position = 4; sens->position>0; sens->position--)
         {
         nanosleep(&Attente, NULL);
-        printf("\npassage");
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.araigneesD[sens->position-1].presence = NORMAL;
         etatJeu.araigneesD[sens->position-1].tid =pthread_self();   
@@ -1003,9 +1047,12 @@ void *fctThreadAraigneeD(void *)
 
         nanosleep(&Attente, NULL);
         pthread_mutex_lock (&mutexEchec);
+         if (echec == AUCUN)
+        {
         echec = FLEUR_BD;
-        pthread_mutex_unlock(&mutexEchec);
         pthread_cond_signal(&condEchec);
+        }
+        pthread_mutex_unlock(&mutexEchec);
         pthread_mutex_lock (&mutexEtatJeu);
         etatJeu.araigneesD[sens->position].presence = AUCUN;
         etatJeu.araigneesD[sens->position].tid = 0;
@@ -1015,49 +1062,54 @@ void *fctThreadAraigneeD(void *)
 }
 void *fctThreadInsecticideG(void *)
 {
-   //  sigset_t mask;
-   //  sigfillset(&mask);
-   //  sigdelset(&mask, SIGQUIT);
-   //  sigprocmask(SIG_SETMASK, &mask, NULL);
-   //  printf("\nId du Thread insecticidesG : %u\n",pthread_self());
-   //     int* position = (int*) malloc (sizeof (int));
-   //   *position = 3;
-   //  pthread_mutex_lock (&mutexEtatJeu);
-   //  etatJeu.insecticidesG[*position].presence = NORMAL;
-   //  etatJeu.insecticidesG[*position].tid = pthread_self();
-   //  pthread_mutex_unlock(&mutexEtatJeu);
+    sigset_t mask;
+    sigfillset(&mask);
+    sigdelset(&mask, SIGQUIT);
+    sigprocmask(SIG_SETMASK, &mask, NULL);
+    printf("\nId du Thread insecticidesG : %u\n",pthread_self());
+       int* position = (int*) malloc (sizeof (int));
+     *position = 3;
+    pthread_mutex_lock (&mutexEtatJeu);
+    etatJeu.insecticidesG[*position].presence = NORMAL;
+    etatJeu.insecticidesG[*position].tid = pthread_self();
+    pthread_mutex_unlock(&mutexEtatJeu);
     
     
     
-   //  struct timespec Attente;
-   //  Attente.tv_sec = 0 ;
-   //  Attente.tv_nsec = 200000000;
-   //  S_LOCALISATION* sens =(S_LOCALISATION*)malloc (sizeof(S_LOCALISATION));
-   //  *sens={*position, GAUCHE};
-   // pthread_setspecific(keySpec, sens);
-   //  if(echec==AUCUN)
-   //  {
-   //  pthread_mutex_lock(&mutexEtatJeu);
+    struct timespec Attente;
+    Attente.tv_sec = 0 ;
+    Attente.tv_nsec = 200000000;
+    S_LOCALISATION* sens =(S_LOCALISATION*)malloc (sizeof(S_LOCALISATION));
+    *sens={*position, GAUCHE};
+   pthread_setspecific(keySpec, sens);
+    if(echec==AUCUN)
+    {
    
-   //  //event deplacement
-   //      for(sens->position = 3; sens->position>0; sens->position--);
-   //      {
-   //      nanosleep(&Attente, NULL);
-   //      if (etatJeu.araigneesG[sens->position].presence = NORMAL) ;
-   //      pthread_mutex_lock (&mutexEtatJeu);
-   //      etatJeu.araigneesG[sens->position-1].presence = NORMAL;
-   //      etatJeu.araigneesG[sens->position-1].tid =pthread_self();   
-   //      etatJeu.araigneesG[sens->position].presence = AUCUN;
-   //      etatJeu.araigneesG[sens->position].tid = 0;
-   //      pthread_mutex_unlock(&mutexEtatJeu);
-        
-   //      }
+    //event deplacement
+        for(sens->position = 3; sens->position>0; sens->position--);
+        {
+        nanosleep(&Attente, NULL);
+        if (etatJeu.araigneesG[sens->position].presence = NORMAL) pthread_kill(etatJeu.araigneesG[sens->position].tid, SIGUSR2);;
+        pthread_mutex_lock (&mutexEtatJeu);
+        etatJeu.insecticidesG[sens->position-1].presence = NORMAL;
+        etatJeu.insecticidesG[sens->position-1].tid =pthread_self();   
+        etatJeu.insecticidesG[sens->position].presence = AUCUN;
+        etatJeu.insecticidesG[sens->position].tid = 0;
+        pthread_mutex_unlock(&mutexEtatJeu);
+        }
+        pthread_mutex_lock (&mutexEtatJeu);
 
-   //  }
-   //  else
-   //  {
-   //      pthread_mutex_unlock(&mutexEtatJeu);
-   //      pthread_mutex_unlock(&mutexEchec);
+         if (etatJeu.araigneesG[sens->position].presence = NORMAL) pthread_kill(etatJeu.araigneesG[sens->position].tid, SIGUSR2);;
+            pthread_mutex_unlock(&mutexEtatJeu);
+
+
+    }
+    else
+    {
+        pthread_mutex_unlock(&mutexEtatJeu);
+        pthread_mutex_unlock(&mutexEchec);
+    }
+     pthread_exit(0);
 }
 void *fctThreadInsecticideD(void *)
 {
@@ -1093,6 +1145,7 @@ void handlerSIGALRM(int )
 }
 void handlerSIGUSR1(int)
 {
+    //printf("\n entre");
    S_LOCALISATION *sens = (S_LOCALISATION *) pthread_getspecific(keySpec);
    if (sens->orientation == GAUCHE)
    {
